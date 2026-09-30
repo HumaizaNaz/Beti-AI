@@ -17,25 +17,25 @@ function cleanCallback(value: string | null): string | null {
 export async function helpFromAnyPhone(
   deps: Deps,
   input: { phone: string; pin: string; action: HelpAction; callbackNumber: string | null },
-): Promise<{ status: 'done' | 'wrong' | 'locked' }> {
+): Promise<{ status: 'done'; sent: number } | { status: 'wrong' | 'locked' }> {
   const phone = normalizePkPhone(input.phone);
   const profile = phone ? await deps.repo.getProfileByPhone(phone) : null;
   if (!profile) return { status: 'wrong' };
 
   const guard = await verifyPin(deps, profile, input.pin);
-  if (guard === 'wrong' || guard === 'locked') return { status: guard };
-  if (guard === 'duress') return { status: 'done' };
+  if (guard.result === 'wrong' || guard.result === 'locked') return { status: guard.result };
+  if (guard.result === 'duress') return { status: 'done', sent: guard.sent ?? 0 };
 
   const open = await deps.repo.getOpenTrip(profile.id);
   if (input.action === 'help') {
     if (open?.status === 'active') await deps.repo.transitionTrip(open.id, 'active', 'alerted');
-    await raiseAlert(deps, { userId: profile.id, tripId: open?.id ?? null, reason: 'help_page' });
-    return { status: 'done' };
+    const { sent } = await raiseAlert(deps, { userId: profile.id, tripId: open?.id ?? null, reason: 'help_page' });
+    return { status: 'done', sent };
   }
 
   if (open) await deps.repo.transitionTrip(open.id, open.status, 'safe', { shareExpiresAt: shareExpiry(deps.now()) });
   const alert = await deps.repo.latestOpenAlert(profile.id);
   if (alert) await deps.repo.resolveAlert(alert.id, profile.name, deps.now());
-  await notifyContacts(deps, profile.id, phoneLostText(profile.name, cleanCallback(input.callbackNumber)));
-  return { status: 'done' };
+  const sent = await notifyContacts(deps, profile.id, phoneLostText(profile.name, cleanCallback(input.callbackNumber)));
+  return { status: 'done', sent };
 }

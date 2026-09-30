@@ -35,6 +35,19 @@ async function requireProfile(deps: Deps, userId: string): Promise<Profile> {
   return profile;
 }
 
+/** What the phone is allowed to see: a duress-closed trip looks finished. */
+function phoneStatus(trip: Trip): TripStatus {
+  return trip.duressAt && trip.status === 'alerted' ? 'safe' : trip.status;
+}
+
+/** Resolves this trip's open alerts and tells the family she is safe. */
+async function closeAsFalseAlarm(deps: Deps, trip: Trip, profile: Profile): Promise<void> {
+  for (const alert of await deps.repo.listOpenAlertsForTrip(trip.id)) {
+    await deps.repo.resolveAlert(alert.id, profile.name, deps.now());
+  }
+  await notifyContacts(deps, profile.id, safeText(profile.name, true));
+}
+
 export async function startTrip(
   deps: Deps,
   userId: string,
@@ -64,7 +77,7 @@ export async function recordLocations(
   points: unknown,
 ): Promise<{ saved: number; status: TripStatus; deadlineAt: string }> {
   const trip = await ownTrip(deps, userId, tripId);
-  const result = { saved: 0, status: trip.status, deadlineAt: trip.deadlineAt };
+  const result = { saved: 0, status: phoneStatus(trip), deadlineAt: trip.deadlineAt };
   if (trip.status === 'safe' || !Array.isArray(points)) return result;
 
   const now = deps.now();
@@ -93,17 +106,20 @@ export async function finishTrip(
 ): Promise<{ status: 'safe' | 'wrong' | 'locked' }> {
   const trip = await ownTrip(deps, userId, tripId);
   const profile = await requireProfile(deps, userId);
-  const guard = await verifyPin(deps, profile, pin);
-  if (guard === 'wrong' || guard === 'locked') return { status: guard };
-  if (guard === 'duress') return { status: 'safe' };
+  const { result } = await verifyPin(deps, profile, pin);
+  if (result === 'wrong' || result === 'locked') return { status: result };
+  if (result === 'duress') {
+    // Looks finished on the phone; stays "alerted" (with the duress mark) for the family.
+    await deps.repo.transitionTrip(trip.id, 'active', 'alerted');
+    return { status: 'safe' };
+  }
 
   const expires = shareExpiry(deps.now());
   if (await deps.repo.transitionTrip(trip.id, 'active', 'safe', { shareExpiresAt: expires })) {
     await notifyContacts(deps, userId, safeText(profile.name, false));
-  } else if (await deps.repo.transitionTrip(trip.id, 'alerted', 'safe', { shareExpiresAt: expires })) {
-    const open = await deps.repo.latestOpenAlert(userId);
-    if (open) await deps.repo.resolveAlert(open.id, profile.name, deps.now());
-    await notifyContacts(deps, userId, safeText(profile.name, true));
+  } else {
+    const closed = await deps.repo.transitionTrip(trip.id, 'alerted', 'safe', { shareExpiresAt: expires });
+    if (closed) await closeAsFalseAlarm(deps, closed, profile);
   }
   return { status: 'safe' };
 }
@@ -116,13 +132,12 @@ export async function extendTrip(
 ): Promise<{ status: 'extended'; deadlineAt: string } | { status: 'wrong' | 'locked' }> {
   const trip = await ownTrip(deps, userId, tripId);
   const profile = await requireProfile(deps, userId);
-  const guard = await verifyPin(deps, profile, pin);
-  if (guard === 'wrong' || guard === 'locked') return { status: guard };
+  const { result } = await verifyPin(deps, profile, pin);
+  if (result === 'wrong' || result === 'locked') return { status: result };
 
+  // Duress extends for real too, so the phone behaves exactly as with the safe PIN.
   const base = Math.max(new Date(trip.deadlineAt).getTime(), deps.now().getTime());
   const deadlineAt = addMinutes(new Date(base), EXTEND_MINUTES).toISOString();
-  if (guard === 'duress') return { status: 'extended', deadlineAt };
-
   const updated = await deps.repo.transitionTrip(trip.id, 'active', 'active', { deadlineAt });
   if (!updated) throw new TripError('not_active');
   return { status: 'extended', deadlineAt: new Date(updated.deadlineAt).toISOString() };
@@ -134,23 +149,39 @@ export async function sendSos(
   input: { reason: 'sos' | 'calculator'; lat: number | null; lng: number | null },
 ): Promise<RaiseResult> {
   const open = await deps.repo.getOpenTrip(userId);
-  if (open?.status === 'active') await deps.repo.transitionTrip(open.id, 'active', 'alerted');
+  if (open && input.reason === 'calculator') {
+    // Silent: mark the trip for the family, but leave the phone screen unchanged.
+    await deps.repo.transitionTrip(open.id, open.status, open.status, { duressAt: deps.now().toISOString() });
+  } else if (open?.status === 'active') {
+    await deps.repo.transitionTrip(open.id, 'active', 'alerted');
+  }
   return raiseAlert(deps, { userId, tripId: open?.id ?? null, reason: input.reason, lat: input.lat, lng: input.lng });
 }
 
 /** Runs every minute from Supabase pg_cron. */
 export async function expireDueTrips(deps: Deps): Promise<{ expired: number; retried: number }> {
-  const retry = await retryDeliveries(deps);
+  // Timer alerts first: nothing else may delay or block the Dead-Man's Switch.
   const due = await deps.repo.claimDueTrips(deps.now());
   for (const trip of due) {
     try {
-      await raiseAlert(deps, { userId: trip.userId, tripId: trip.id, reason: 'timer' });
+      const { alert } = await raiseAlert(deps, { userId: trip.userId, tripId: trip.id, reason: 'timer' });
+      await deps.repo.markTimerAlert(trip.id, alert.id);
+      // She may have pressed "Pohanch gayi" while the alert was going out: make the false alarm the last word.
+      const now = await deps.repo.getTrip(trip.id);
+      const profile = now?.status === 'safe' ? await deps.repo.getProfile(trip.userId) : null;
+      if (now && profile) await closeAsFalseAlarm(deps, now, profile);
     } catch (err) {
-      console.error('timer alert failed; will retry next run', trip.id, err);
-      await deps.repo.transitionTrip(trip.id, 'alerted', 'active');
+      // No revert needed: an unfinished claim is re-offered by claimDueTrips after TIMER_RECLAIM_MS.
+      console.error('timer alert failed; will retry', trip.id, err);
     }
   }
-  return { expired: due.length, retried: retry.retried };
+  let retried = 0;
+  try {
+    retried = (await retryDeliveries(deps)).retried;
+  } catch (err) {
+    console.error('delivery retry failed', err);
+  }
+  return { expired: due.length, retried };
 }
 
 export interface LiveView {
@@ -168,7 +199,7 @@ export async function getLiveView(deps: Deps, token: string): Promise<LiveView |
   if (!profile) return null;
   return {
     name: profile.name,
-    status: trip.status,
+    status: trip.duressAt ? 'alerted' : trip.status,
     deadlineAt: trip.deadlineAt,
     last: await deps.repo.lastLocation(trip.id),
   };

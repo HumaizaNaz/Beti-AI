@@ -1,9 +1,13 @@
-// app/api/help/route.ts
 import { errorResponse, json, readJson } from '@/lib/api';
 import { helpFromAnyPhone } from '@/lib/help';
+import { clientIp, createRateLimiter } from '@/lib/rate-limit';
 import { getDeps } from '@/lib/server-deps';
 
+// Public page: slow down scripted PIN guessing and alarm spamming from one address.
+const allow = createRateLimiter(10, 15 * 60_000);
+
 export async function POST(req: Request) {
+  if (!allow(clientIp(req))) return json({ error: 'rate_limited' }, 429);
   try {
     const body = await readJson(req);
     const result = await helpFromAnyPhone(getDeps(), {

@@ -27,9 +27,11 @@ interface AlertContext {
 
 const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-function reachable(contacts: Contact[]): Contact[] {
-  return contacts.filter((c) => c.status !== 'blocked');
-}
+/** Channels are independent: Telegram needs a connected chat, email works whatever Telegram's state. */
+const telegramReachable = (c: Contact) => !!c.telegramChatId && c.status === 'connected';
+
+/** A pending delivery younger than this may still be in flight in another request. */
+const IN_FLIGHT_MS = 2 * 60_000;
 
 function buildText(deps: Deps, ctx: AlertContext): string {
   return alertText({
@@ -115,11 +117,11 @@ export async function raiseAlert(deps: Deps, input: RaiseInput): Promise<RaiseRe
     createdAt: deps.now().toISOString(),
   });
 
-  const contacts = reachable(await deps.repo.listContacts(profile.id));
+  const contacts = await deps.repo.listContacts(profile.id);
   const planned: NewDelivery[] = [];
   for (const c of contacts) {
     const base = { alertId: alert.id, contactId: c.id, status: 'pending' as const, attempts: 0, lastError: null };
-    if (c.telegramChatId && c.status === 'connected') planned.push({ ...base, channel: 'telegram' });
+    if (telegramReachable(c)) planned.push({ ...base, channel: 'telegram' });
     if (c.email) planned.push({ ...base, channel: 'email' });
   }
   const deliveries = await deps.repo.createDeliveries(planned);
@@ -133,10 +135,12 @@ export async function raiseAlert(deps: Deps, input: RaiseInput): Promise<RaiseRe
 }
 
 export async function retryDeliveries(deps: Deps): Promise<{ retried: number; sent: number }> {
-  const pending = await deps.repo.listRetryableDeliveries(MAX_ATTEMPTS);
+  const candidates = await deps.repo.listRetryableDeliveries(MAX_ATTEMPTS);
+  const inFlightAfter = deps.now().getTime() - IN_FLIGHT_MS;
   let sent = 0;
+  let retried = 0;
   const contexts = new Map<string, AlertContext | null>();
-  for (const d of pending) {
+  for (const d of candidates) {
     if (!contexts.has(d.alertId)) {
       const alert = await deps.repo.getAlert(d.alertId);
       const profile = alert ? await deps.repo.getProfile(alert.userId) : null;
@@ -145,18 +149,20 @@ export async function retryDeliveries(deps: Deps): Promise<{ retried: number; se
     }
     const ctx = contexts.get(d.alertId);
     if (!ctx) continue;
+    if (d.status === 'pending' && new Date(ctx.alert.createdAt).getTime() > inFlightAfter) continue;
     const contact = (await deps.repo.getContact(d.contactId)) ?? undefined;
+    retried++;
     if (await attemptDelivery(deps, d, contact, ctx)) sent++;
   }
-  return { retried: pending.length, sent };
+  return { retried, sent };
 }
 
 /** Plain notice to every reachable contact. Best effort: never throws. Returns how many sends worked. */
 export async function notifyContacts(deps: Deps, userId: string, text: string, exceptContactId?: string): Promise<number> {
-  const contacts = reachable(await deps.repo.listContacts(userId)).filter((c) => c.id !== exceptContactId);
+  const contacts = (await deps.repo.listContacts(userId)).filter((c) => c.id !== exceptContactId);
   const sends: Promise<void>[] = [];
   for (const c of contacts) {
-    if (c.telegramChatId && c.status === 'connected') sends.push(deps.telegram.sendMessage(c.telegramChatId, text));
+    if (telegramReachable(c) && c.telegramChatId) sends.push(deps.telegram.sendMessage(c.telegramChatId, text));
     if (c.email) sends.push(deps.email.send(c.email, 'Beti AI', text));
   }
   const results = await Promise.allSettled(sends);

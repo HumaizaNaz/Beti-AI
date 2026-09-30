@@ -17,7 +17,7 @@ describe('helpFromAnyPhone', () => {
     const { deps, repo } = makeDeps();
     await seedUser(repo);
     const r = await helpFromAnyPhone(deps, { phone: '0300-1234567', pin: '1234', action: 'help', callbackNumber: null });
-    expect(r).toEqual({ status: 'done' });
+    expect(r).toEqual({ status: 'done', sent: 3 });
     expect(repo.data.alerts.map((a) => a.reason)).toEqual(['help_page']);
   });
 
@@ -28,7 +28,7 @@ describe('helpFromAnyPhone', () => {
     const r = await helpFromAnyPhone(deps, {
       phone: '+92 300 1234567', pin: '1234', action: 'ok', callbackNumber: '0321-5555555 <script>',
     });
-    expect(r).toEqual({ status: 'done' });
+    expect(r).toEqual({ status: 'done', sent: 3 });
     expect((await repo.getTrip(trip.id))!.status).toBe('safe');
     const last = tg.texts('111').at(-1)!;
     expect(last).toContain('phone was stolen');
@@ -40,7 +40,7 @@ describe('helpFromAnyPhone', () => {
     const { deps, repo } = makeDeps();
     await seedUser(repo);
     const r = await helpFromAnyPhone(deps, { phone: '03001234567', pin: '9999', action: 'ok', callbackNumber: null });
-    expect(r).toEqual({ status: 'done' });
+    expect(r).toEqual({ status: 'done', sent: 3 });
     expect(repo.data.alerts.map((a) => a.reason)).toEqual(['duress']);
   });
 

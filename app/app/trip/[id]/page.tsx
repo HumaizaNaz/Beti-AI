@@ -63,12 +63,16 @@ export default function TripPage() {
         }
         return;
       }
+      // The server answered: never re-send this PIN automatically (a mistyped one would count towards a lock).
+      if (mode === 'finish') {
+        pendingFinishPin.current = null;
+        setOfflineFinish(false);
+      }
       const status = res.data?.status;
-      if (status === 'wrong') {
-        setPinError(t('wrongPin'));
-        playAudio('pin-wrong');
-      } else if (status === 'locked') {
-        setPinError(t('locked'));
+      if (status === 'wrong' || status === 'locked') {
+        setPinMode(mode); // reopen the pad so she sees why
+        setPinError(t(status === 'wrong' ? 'wrongPin' : 'locked'));
+        if (status === 'wrong') playAudio('pin-wrong');
       } else if (mode === 'finish' && status === 'safe') {
         finishSafely();
       } else if (mode === 'extend' && status === 'extended' && res.data?.deadlineAt) {
@@ -219,9 +223,10 @@ export default function TripPage() {
       </div>
 
       {trip?.status === 'alerted' && (
-        <p className="rounded-2xl bg-red-950/60 border border-red-500/40 p-4 text-center text-xl font-bold text-red-200">
-          🚨 {t('alertedTrip')}
-        </p>
+        <div className="rounded-2xl bg-red-950/60 border border-red-500/40 p-4 flex flex-col gap-3 text-center">
+          <p className="text-xl font-bold text-red-200">🚨 {t('alertedTrip')}</p>
+          <a href="tel:15" className="rounded-2xl bg-red-600 text-white text-xl font-bold py-3">📞 {t('call15')}</a>
+        </div>
       )}
 
       {offlineFinish && (

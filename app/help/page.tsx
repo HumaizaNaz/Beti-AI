@@ -18,6 +18,7 @@ export default function HelpPage() {
   const [callback, setCallback] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(0);
 
   const choose = (a: Action) => {
     setAction(a);
@@ -28,13 +29,18 @@ export default function HelpPage() {
   const submit = async (pin: string) => {
     setBusy(true);
     setError(null);
-    const res = await api<{ status: string }>('/api/help', { body: { phone, pin, action, callbackNumber: callback || null } });
+    const res = await api<{ status: string; sent?: number }>('/api/help', {
+      body: { phone, pin, action, callbackNumber: callback || null },
+    });
     setBusy(false);
     const status = res.data?.status;
     if (res.status === 0) setError(t('noNet'));
-    else if (status === 'done') setStep('done');
-    else if (status === 'locked') setError(t('locked'));
-    else setError(t('wrongPin'));
+    else if (status === 'done') {
+      setSent(res.data?.sent ?? 0);
+      setStep('done');
+    } else if (status === 'locked' || res.status === 429) setError(t('locked'));
+    else if (status === 'wrong') setError(t('wrongPin'));
+    else setError(t('alertFailed')); // server error: never let her think it worked
   };
 
   return (
@@ -83,8 +89,17 @@ export default function HelpPage() {
 
       {step === 'done' && (
         <div className="flex flex-col gap-4 text-center pt-6">
-          <p className="text-7xl" aria-hidden>{action === 'help' ? '🚨' : '✅'}</p>
-          <p className="text-2xl font-bold text-emerald-300">{t(action === 'help' ? 'alertSent' : 'helpDone')}</p>
+          {sent > 0 ? (
+            <>
+              <p className="text-7xl" aria-hidden>{action === 'help' ? '🚨' : '✅'}</p>
+              <p className="text-2xl font-bold text-emerald-300">{t(action === 'help' ? 'alertSent' : 'helpDone')} ({sent})</p>
+            </>
+          ) : (
+            <>
+              <p className="text-7xl" aria-hidden>❌</p>
+              <p className="text-2xl font-bold text-red-300">{t('alertFailed')}</p>
+            </>
+          )}
           <a href="tel:15" className="rounded-3xl bg-red-600 text-white text-2xl font-bold py-5">📞 {t('call15')}</a>
         </div>
       )}

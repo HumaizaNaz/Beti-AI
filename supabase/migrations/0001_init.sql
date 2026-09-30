@@ -37,10 +37,14 @@ create table public.trips (
   deadline_at timestamptz not null,
   status text not null check (status in ('active', 'safe', 'alerted')),
   share_token text not null unique,
-  share_expires_at timestamptz
+  share_expires_at timestamptz,
+  duress_at timestamptz,
+  timer_claimed_at timestamptz,
+  timer_alert_id uuid
 );
 create index trips_due_idx on public.trips(deadline_at) where status = 'active';
 create index trips_user_idx on public.trips(user_id, started_at desc);
+create index trips_reclaim_idx on public.trips(timer_claimed_at) where status = 'alerted' and timer_alert_id is null;
 
 create table public.locations (
   id bigint generated always as identity primary key,
@@ -76,6 +80,25 @@ create table public.alert_deliveries (
   last_error text
 );
 create index deliveries_retry_idx on public.alert_deliveries(status) where status <> 'sent';
+
+-- One PIN attempt, taken atomically so parallel requests cannot bypass the lock.
+create or replace function public.beti_reserve_pin_attempt(p_user uuid, p_now timestamptz, p_max int)
+returns table (allowed boolean, attempt int)
+language sql
+as $$
+  with upd as (
+    update public.profiles
+       set failed_pin_count = failed_pin_count + 1
+     where id = p_user
+       and failed_pin_count < p_max
+       and (pin_locked_until is null or pin_locked_until <= p_now)
+    returning failed_pin_count
+  )
+  select true, failed_pin_count from upd
+  union all
+  select false, 0 where not exists (select 1 from upd);
+$$;
+revoke execute on function public.beti_reserve_pin_attempt(uuid, timestamptz, int) from public, anon, authenticated;
 
 -- RLS on, no policies: only the server (service_role) can read or write.
 alter table public.profiles enable row level security;

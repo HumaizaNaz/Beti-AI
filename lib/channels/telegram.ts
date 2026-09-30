@@ -12,12 +12,16 @@ export interface TelegramApi {
   setWebhook(url: string, secret: string): Promise<void>;
 }
 
+/** A hung request must never hold up the Dead-Man's Switch run. */
+const TIMEOUT_MS = 10_000;
+
 export function createTelegram(token: string, fetchImpl: typeof fetch = fetch): TelegramApi {
   async function call(method: string, body: Record<string, unknown>): Promise<void> {
     const res = await fetchImpl(`https://api.telegram.org/bot${token}/${method}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     const json = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string };
     if (!res.ok || !json.ok) throw new Error(`Telegram ${method} failed: ${json.description ?? res.status}`);

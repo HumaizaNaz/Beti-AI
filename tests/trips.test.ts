@@ -80,7 +80,8 @@ describe('finishTrip', () => {
   it('duress PIN looks exactly like safe but raises a silent alert', async () => {
     const { deps, repo, profile, trip } = await setup();
     expect(await finishTrip(deps, profile.id, trip.id, '9999')).toEqual({ status: 'safe' });
-    expect((await repo.getTrip(trip.id))!.status).toBe('safe');
+    // Hidden from the phone (see review-fixes C2), still in danger for the family.
+    expect((await repo.getTrip(trip.id))!).toMatchObject({ status: 'alerted', duressAt: '2026-10-01T10:00:00.000Z' });
     expect(repo.data.alerts.map((a) => a.reason)).toEqual(['duress']);
     expect(repo.data.alerts[0].tripId).toBe(trip.id);
   });
@@ -133,7 +134,7 @@ describe('expireDueTrips (Dead-Man\'s Switch)', () => {
     if (cron.expired === 1) expect(tg.texts('111').at(-1)).toContain('False alarm');
   });
 
-  it('puts the trip back to active if raising the alert crashes, so the next run retries', async () => {
+  it('re-offers the trip after 2 minutes if raising the alert crashed', async () => {
     const { deps, repo, trip, advance } = await setup();
     advance(21);
     const original = repo.createAlert;
@@ -141,8 +142,10 @@ describe('expireDueTrips (Dead-Man\'s Switch)', () => {
       throw new Error('db down');
     };
     expect((await expireDueTrips(deps)).expired).toBe(1);
-    expect((await repo.getTrip(trip.id))!.status).toBe('active');
+    expect((await repo.getTrip(trip.id))!.timerAlertId).toBeNull();
     repo.createAlert = original;
+    expect((await expireDueTrips(deps)).expired).toBe(0);
+    advance(3);
     expect((await expireDueTrips(deps)).expired).toBe(1);
     expect(repo.data.alerts.map((a) => a.reason)).toEqual(['timer']);
   });

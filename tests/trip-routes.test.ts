@@ -86,6 +86,15 @@ describe('public routes', () => {
     expect(await res.json()).toEqual({ status: 'wrong' });
   });
 
+  it('help is rate limited per IP', async () => {
+    const { POST } = await import('@/app/api/help/route');
+    const req = () => post({ phone: '03009999999', pin: '0000', action: 'help' }, { 'x-forwarded-for': '203.0.113.9' });
+    const statuses: number[] = [];
+    for (let i = 0; i < 11; i++) statuses.push((await POST(req())).status);
+    expect(statuses.slice(0, 10).every((s) => s === 200)).toBe(true);
+    expect(statuses[10]).toBe(429);
+  });
+
   it('cron needs the secret', async () => {
     const { POST } = await import('@/app/api/cron/deadlines/route');
     expect((await POST(post({}))).status).toBe(401);

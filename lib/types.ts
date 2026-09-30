@@ -42,6 +42,11 @@ export interface Trip {
   status: TripStatus;
   shareToken: string;
   shareExpiresAt: string | null;
+  /** Set when a duress PIN or a silent SOS was used on this trip: the family sees danger, the phone does not. */
+  duressAt: string | null;
+  /** Dead-Man's Switch bookkeeping: when the timer claimed the trip, and the alert it produced. */
+  timerClaimedAt: string | null;
+  timerAlertId: string | null;
 }
 
 export interface LocationPoint {

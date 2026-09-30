@@ -13,14 +13,22 @@ export default function CalculatorPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [secretPin, setSecretPin] = useState('9999');
   const [degClicks, setDegClicks] = useState(0);
+  // Demo mode (signed out): show the toast and the 9999= hint. Signed in: fully silent disguise.
+  const [demoMode, setDemoMode] = useState(false);
 
-  const triggerStealthEmergency = async () => {
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate([200, 100, 200]);
-    }
+  useEffect(() => {
+    fetch('/api/me', { cache: 'no-store' })
+      .then((res) => setDemoMode(!res.ok))
+      .catch(() => setDemoMode(false));
+  }, []);
+
+  const showDemoToast = () => {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
     setShowToast(true);
     setTimeout(() => setShowToast(false), 4000);
+  };
 
+  const triggerStealthEmergency = async () => {
     try {
       const pos = await currentPosition(3000);
       const res = await fetch('/api/sos', {
@@ -28,8 +36,13 @@ export default function CalculatorPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: 'calculator', lat: pos?.lat ?? null, lng: pos?.lng ?? null }),
       });
-      if (res.status === 401) {
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        // Only a tiny, deniable buzz — and only if someone was really reached.
+        if (data?.sent > 0 && typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(60);
+      } else if (res.status === 401) {
         // Not signed in: keep the public demo behaviour.
+        showDemoToast();
         await fetch('/api/trigger-sos', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -177,7 +190,7 @@ export default function CalculatorPage() {
         </div>
 
         <div className="text-center pt-2 flex items-center justify-between text-[11px] text-neutral-500">
-          <span>🤫 Type <code className="text-neutral-400">9999=</code> for SOS</span>
+          <span>{demoMode && <>🤫 Type <code className="text-neutral-400">9999=</code> for SOS</>}</span>
           <Link href="/" className="hover:text-white">Exit →</Link>
         </div>
       </div>

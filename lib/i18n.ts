@@ -28,7 +28,7 @@ export const STRINGS = {
   finishOffline: { ur: 'نیٹ نہیں — گھر والوں کو SMS سے بتائیں', en: 'No internet — tell your family by SMS' },
   gpsOk: { ur: 'مقام مل رہا ہے', en: 'Location on' },
   gpsOff: { ur: 'مقام بند ہے', en: 'Location off' },
-  alertedTrip: { ur: 'گھر والوں کو اطلاع جا چکی ہے', en: 'Your family has been alerted' },
+  alertedTrip: { ur: 'گھر والوں کو اطلاع بھیجی جا رہی ہے — خطرہ ہو تو 15 پر کال کریں', en: 'Alerting your family — if you are in danger, call 15' },
   timeUp: { ur: 'وقت ختم', en: 'Time is up' },
   back: { ur: 'واپس', en: 'Back' },
   next: { ur: 'آگے', en: 'Next' },

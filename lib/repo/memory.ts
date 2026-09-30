@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Alert, Contact, Delivery, LocationPoint, Profile, Trip } from '@/lib/types';
-import type { Repo } from './types';
+import { TIMER_RECLAIM_MS, type Repo } from './types';
 
 export interface MemoryData {
   profiles: Map<string, Profile>;
@@ -43,6 +43,13 @@ export function createMemoryRepo(): MemoryRepo {
       const p = data.profiles.get(userId);
       if (p) Object.assign(p, state);
     },
+    async reservePinAttempt(userId, now, max) {
+      const p = data.profiles.get(userId);
+      const locked = p?.pinLockedUntil && new Date(p.pinLockedUntil) > now;
+      if (!p || locked || p.failedPinCount >= max) return { allowed: false, attempt: 0 };
+      p.failedPinCount += 1;
+      return { allowed: true, attempt: p.failedPinCount };
+    },
 
     async listContacts(userId) {
       return data.contacts.filter((c) => c.userId === userId).map(copy);
@@ -75,7 +82,7 @@ export function createMemoryRepo(): MemoryRepo {
     },
 
     async createTrip(trip) {
-      const row: Trip = { ...copy(trip), id: randomUUID() };
+      const row: Trip = { ...copy(trip), id: randomUUID(), duressAt: null, timerClaimedAt: null, timerAlertId: null };
       data.trips.push(row);
       return copy(row);
     },
@@ -84,7 +91,10 @@ export function createMemoryRepo(): MemoryRepo {
       return t ? copy(t) : null;
     },
     async getOpenTrip(userId) {
-      const t = newest(data.trips.filter((x) => x.userId === userId && x.status !== 'safe'), (x) => x.startedAt);
+      const open = data.trips.filter(
+        (x) => x.userId === userId && (x.status === 'active' || (x.status === 'alerted' && !x.duressAt)),
+      );
+      const t = newest(open, (x) => x.startedAt);
       return t ? copy(t) : null;
     },
     async getTripByShareToken(token) {
@@ -98,9 +108,21 @@ export function createMemoryRepo(): MemoryRepo {
       return copy(t);
     },
     async claimDueTrips(now) {
-      const due = data.trips.filter((t) => t.status === 'active' && new Date(t.deadlineAt) < now);
-      for (const t of due) t.status = 'alerted';
-      return due.map(copy);
+      const staleBefore = now.getTime() - TIMER_RECLAIM_MS;
+      const claimed = data.trips.filter(
+        (t) =>
+          (t.status === 'active' && new Date(t.deadlineAt) < now) ||
+          (t.status === 'alerted' && !t.timerAlertId && t.timerClaimedAt !== null && new Date(t.timerClaimedAt).getTime() < staleBefore),
+      );
+      for (const t of claimed) {
+        t.status = 'alerted';
+        t.timerClaimedAt = now.toISOString();
+      }
+      return claimed.map(copy);
+    },
+    async markTimerAlert(tripId, alertId) {
+      const t = data.trips.find((x) => x.id === tripId);
+      if (t) t.timerAlertId = alertId;
     },
 
     async addLocations(tripId, points) {
@@ -123,8 +145,14 @@ export function createMemoryRepo(): MemoryRepo {
       return a ? copy(a) : null;
     },
     async latestOpenAlert(userId) {
-      const a = newest(data.alerts.filter((x) => x.userId === userId && !x.resolvedAt), (x) => x.createdAt);
+      const a = newest(
+        data.alerts.filter((x) => x.userId === userId && !x.resolvedAt && x.reason !== 'test'),
+        (x) => x.createdAt,
+      );
       return a ? copy(a) : null;
+    },
+    async listOpenAlertsForTrip(tripId) {
+      return data.alerts.filter((x) => x.tripId === tripId && !x.resolvedAt).map(copy);
     },
     async resolveAlert(id, resolvedBy, at) {
       const a = data.alerts.find((x) => x.id === id);

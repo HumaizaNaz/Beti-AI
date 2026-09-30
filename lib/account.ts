@@ -51,7 +51,7 @@ export async function setupProfile(deps: Deps, userId: string, input: Record<str
 export async function checkUserPin(deps: Deps, userId: string, pin: string): Promise<'ok' | 'wrong' | 'locked'> {
   const profile = await deps.repo.getProfile(userId);
   if (!profile) throw new AccountError('not_found');
-  const result = await verifyPin(deps, profile, pin);
+  const { result } = await verifyPin(deps, profile, pin);
   return result === 'duress' ? 'ok' : result;
 }
 

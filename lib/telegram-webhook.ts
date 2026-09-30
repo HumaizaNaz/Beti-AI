@@ -8,7 +8,8 @@ const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object';
 async function handleStart(deps: Deps, chatId: string, text: string) {
   const token = text.split(/\s+/)[1]?.trim();
   const contact = token ? await deps.repo.getContactByInviteToken(token) : null;
-  if (!contact) {
+  // Once linked, an invite (which may sit in a WhatsApp chat or be forwarded) cannot move the contact to another chat.
+  if (!contact || (contact.telegramChatId !== null && contact.telegramChatId !== chatId)) {
     await deps.telegram.sendMessage(chatId, LINK_INVALID_TEXT);
     return;
   }

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Alert, Contact, Delivery, LocationPoint, Profile, Trip } from '@/lib/types';
-import type { Repo } from './types';
+import { TIMER_RECLAIM_MS, type Repo } from './types';
 
 type Row = Record<string, any>;
 
@@ -21,6 +21,7 @@ const toTrip = (r: Row): Trip => ({
   id: r.id, userId: r.user_id, vehiclePhotoPath: r.vehicle_photo_path, durationMin: r.duration_min,
   startedAt: r.started_at, deadlineAt: r.deadline_at, status: r.status, shareToken: r.share_token,
   shareExpiresAt: r.share_expires_at,
+  duressAt: r.duress_at, timerClaimedAt: r.timer_claimed_at, timerAlertId: r.timer_alert_id,
 });
 const toLocation = (r: Row): LocationPoint => ({
   lat: r.lat, lng: r.lng, accuracyM: r.accuracy_m, recordedAt: r.recorded_at,
@@ -58,6 +59,11 @@ export function createSupabaseRepo(db: SupabaseClient): Repo {
       must(await db.from('profiles')
         .update({ failed_pin_count: s.failedPinCount, pin_locked_until: s.pinLockedUntil })
         .eq('id', userId));
+    },
+    async reservePinAttempt(userId, now, max) {
+      const rows = must(await db.rpc('beti_reserve_pin_attempt', { p_user: userId, p_now: now.toISOString(), p_max: max }));
+      const row = (rows ?? [])[0] as Row | undefined;
+      return { allowed: !!row?.allowed, attempt: Number(row?.attempt ?? 0) };
     },
 
     async listContacts(userId) {
@@ -107,7 +113,8 @@ export function createSupabaseRepo(db: SupabaseClient): Repo {
       return r ? toTrip(r) : null;
     },
     async getOpenTrip(userId) {
-      const r = must(await db.from('trips').select('*').eq('user_id', userId).in('status', ['active', 'alerted'])
+      const r = must(await db.from('trips').select('*').eq('user_id', userId)
+        .or('status.eq.active,and(status.eq.alerted,duress_at.is.null)')
         .order('started_at', { ascending: false }).limit(1).maybeSingle());
       return r ? toTrip(r) : null;
     },
@@ -119,13 +126,21 @@ export function createSupabaseRepo(db: SupabaseClient): Repo {
       const row: Row = { status: to };
       if (patch.shareExpiresAt !== undefined) row.share_expires_at = patch.shareExpiresAt;
       if (patch.deadlineAt !== undefined) row.deadline_at = patch.deadlineAt;
+      if (patch.duressAt !== undefined) row.duress_at = patch.duressAt;
       const r = must(await db.from('trips').update(row).eq('id', id).eq('status', from).select().maybeSingle());
       return r ? toTrip(r) : null;
     },
     async claimDueTrips(now) {
-      const rows = must(await db.from('trips').update({ status: 'alerted' })
-        .eq('status', 'active').lt('deadline_at', now.toISOString()).select());
-      return (rows ?? []).map(toTrip);
+      const at = now.toISOString();
+      const fresh = must(await db.from('trips').update({ status: 'alerted', timer_claimed_at: at })
+        .eq('status', 'active').lt('deadline_at', at).select());
+      const staleBefore = new Date(now.getTime() - TIMER_RECLAIM_MS).toISOString();
+      const stale = must(await db.from('trips').update({ timer_claimed_at: at })
+        .eq('status', 'alerted').is('timer_alert_id', null).lt('timer_claimed_at', staleBefore).select());
+      return [...(fresh ?? []), ...(stale ?? [])].map(toTrip);
+    },
+    async markTimerAlert(tripId, alertId) {
+      must(await db.from('trips').update({ timer_alert_id: alertId }).eq('id', tripId));
     },
 
     async addLocations(tripId, points) {
@@ -153,8 +168,12 @@ export function createSupabaseRepo(db: SupabaseClient): Repo {
     },
     async latestOpenAlert(userId) {
       const r = must(await db.from('alerts').select('*').eq('user_id', userId).is('resolved_at', null)
-        .order('created_at', { ascending: false }).limit(1).maybeSingle());
+        .neq('reason', 'test').order('created_at', { ascending: false }).limit(1).maybeSingle());
       return r ? toAlert(r) : null;
+    },
+    async listOpenAlertsForTrip(tripId) {
+      const rows = must(await db.from('alerts').select('*').eq('trip_id', tripId).is('resolved_at', null));
+      return (rows ?? []).map(toAlert);
     },
     async resolveAlert(id, resolvedBy, at) {
       const r = must(await db.from('alerts').update({ resolved_at: at.toISOString(), resolved_by: resolvedBy })
