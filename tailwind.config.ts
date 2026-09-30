@@ -26,7 +26,8 @@ const config: Config = {
         sans: ['var(--font-sans)', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
         display: ['var(--font-display)', 'sans-serif'],
         heading: ['var(--font-display)', 'sans-serif'],
-        mono: ['var(--font-mono)', 'monospace']
+        mono: ['var(--font-mono)', 'monospace'],
+        urdu: ['var(--font-urdu)', 'var(--font-sans)', 'serif']
       },
       animation: {
         'pulse-slow': 'pulse 3.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
