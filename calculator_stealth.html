@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Calculator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    body {
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #000000;
+      color: #ffffff;
+      touch-action: manipulation;
+    }
+    .btn-calc {
+      transition: all 0.12s ease-in-out;
+    }
+    .btn-calc:active {
+      transform: scale(0.92);
+      filter: brightness(1.3);
+    }
+  </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4 bg-black">
+
+  <!-- Mobile Phone Mockup Container -->
+  <div class="w-full max-w-sm bg-neutral-950 rounded-[40px] p-6 shadow-2xl border border-neutral-800 flex flex-col justify-between min-h-[680px] relative overflow-hidden">
+    
+    <!-- Top Status / Camouflage Header -->
+    <div class="flex items-center justify-between text-xs text-neutral-500 pt-2 px-2">
+      <span id="clock">10:04</span>
+      <!-- Hidden Secret Settings Trigger (Triple Click) -->
+      <span onclick="handleHiddenSettingsClick()" class="cursor-pointer font-mono tracking-widest text-[10px] text-neutral-600 hover:text-neutral-400">
+        DEG
+      </span>
+      <div class="flex items-center gap-1.5">
+        <span>5G</span>
+        <div class="w-4 h-2 border border-neutral-500 rounded-sm p-0.5">
+          <div class="bg-neutral-400 h-full w-3/4 rounded-2xs"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Stealth Trigger Toast (Hidden from attacker) -->
+    <div id="stealthToast" class="hidden absolute top-12 left-6 right-6 bg-neutral-900/95 border border-pink-500/40 rounded-2xl p-3 shadow-xl backdrop-blur-md z-30 transition-all duration-300">
+      <div class="flex items-center gap-2.5">
+        <div class="w-2.5 h-2.5 rounded-full bg-pink-500 animate-pulse"></div>
+        <div class="text-xs">
+          <p class="font-bold text-pink-400">Beti AI Sentinel Active</p>
+          <p id="toastMessage" class="text-neutral-300 text-[11px]">Silent Emergency Broadcast sent to Family WhatsApp.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Calculator Display Screen -->
+    <div class="my-auto px-3 text-right">
+      <div id="historyDisplay" class="text-sm text-neutral-500 min-h-[20px] font-mono tracking-wider"></div>
+      <div id="mainDisplay" class="text-6xl font-light tracking-tight text-white overflow-hidden text-ellipsis whitespace-nowrap">
+        0
+      </div>
+    </div>
+
+    <!-- Calculator Keypad Grid (Standard Look) -->
+    <div class="grid grid-cols-4 gap-3.5 pb-2">
+      <!-- Row 1 -->
+      <button onclick="clearDisplay()" class="btn-calc h-16 rounded-full bg-neutral-400 text-black font-medium text-2xl flex items-center justify-center">AC</button>
+      <button onclick="toggleSign()" class="btn-calc h-16 rounded-full bg-neutral-400 text-black font-medium text-2xl flex items-center justify-center">±</button>
+      <button onclick="inputPercent()" class="btn-calc h-16 rounded-full bg-neutral-400 text-black font-medium text-2xl flex items-center justify-center">%</button>
+      <button onclick="setOperator('÷')" class="btn-calc h-16 rounded-full bg-amber-500 text-white font-medium text-3xl flex items-center justify-center">÷</button>
+
+      <!-- Row 2 -->
+      <button onclick="inputDigit('7')" class="btn-calc h-16 rounded-full bg-neutral-800 text-white font-medium text-2xl flex items-center justify-center">7</button>
+      <button onclick="inputDigit('8')" class="btn-calc h-16 rounded-full bg-neutral-800 text-white font-medium text-2xl flex items-center justify-center">8</button>
+      <button onclick="inputDigit('9')" class="btn-calc h-16 rounded-full bg-neutral-800 text-white font-medium text-2xl flex items-center justify-center">9</button>
+      <button onclick="setOperator('×')" class="btn-calc h-16 rounded-full bg-amber-500 text-white font-medium text-3xl flex items-center justify-center">×</button>
+
+      <!-- Row 3 -->
+      <button onclick="inputDigit('4')" class="btn-calc h-16 rounded-full bg-neutral-800 text-white font-medium text-2xl flex items-center justify-center">4</button>
+      <button onclick="inputDigit('5')" class="btn-calc h-16 rounded-full bg-neutral-800 text-white font-medium text-2xl flex items-center justify-center">5</button>
+      <button onclick="inputDigit('6')" class="btn-calc h-16 rounded-full bg-neutral-800 text-white font-medium text-2xl flex items-center justify-center">6</button>
+      <button onclick="setOperator('-')" class="btn-calc h-16 rounded-full bg-amber-500 text-white font-medium text-3xl flex items-center justify-center">−</button>
+
+      <!-- Row 4 -->
+      <button onclick="inputDigit('1')" class="btn-calc h-16 rounded-full bg-neutral-800 text-white font-medium text-2xl flex items-center justify-center">1</button>
+      <button onclick="inputDigit('2')" class="btn-calc h-16 rounded-full bg-neutral-800 text-white font-medium text-2xl flex items-center justify-center">2</button>
+      <button onclick="inputDigit('3')" class="btn-calc h-16 rounded-full bg-neutral-800 text-white font-medium text-2xl flex items-center justify-center">3</button>
+      <button onclick="setOperator('+')" class="btn-calc h-16 rounded-full bg-amber-500 text-white font-medium text-3xl flex items-center justify-center">+</button>
+
+      <!-- Row 5 -->
+      <button onclick="inputDigit('0')" class="btn-calc h-16 col-span-2 rounded-full bg-neutral-800 text-white font-medium text-2xl pl-7 flex items-center justify-start">0</button>
+      <button onclick="inputDot()" class="btn-calc h-16 rounded-full bg-neutral-800 text-white font-medium text-2xl flex items-center justify-center">.</button>
+      <!-- Equal button (Also triggers SOS if secret code 9999 was entered or on long press) -->
+      <button id="equalBtn" onclick="calculateResult()" class="btn-calc h-16 rounded-full bg-amber-500 text-white font-medium text-3xl flex items-center justify-center">=</button>
+    </div>
+
+    <!-- Info bar for developer/testing demo -->
+    <div class="pt-2 text-center">
+      <span class="text-[10px] text-neutral-600">
+        🤫 <b>Secret Panic Codes:</b> Type <code class="text-neutral-400">9999=</code> or <code class="text-neutral-400">1122=</code> to trigger stealth SOS
+      </span>
+    </div>
+
+  </div>
+
+  <!-- Hidden Settings Modal (Revealed only upon triple tapping DEG) -->
+  <div id="settingsModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full">
+      <div class="flex items-center justify-between mb-4 border-b border-neutral-800 pb-3">
+        <h3 class="font-bold text-lg text-pink-400 flex items-center gap-2">🛡️ Beti AI Settings</h3>
+        <button onclick="closeSettings()" class="text-neutral-400 hover:text-white text-xl">✕</button>
+      </div>
+      <div class="space-y-4 text-xs">
+        <div>
+          <label class="text-neutral-400 block mb-1">Secret Panic Code (PIN):</label>
+          <input type="text" id="secretPinInput" value="9999" class="w-full bg-neutral-800 border border-neutral-700 rounded-xl p-2.5 text-white font-mono">
+        </div>
+        <div>
+          <label class="text-neutral-400 block mb-1">Emergency Contact 1 (Mother):</label>
+          <input type="text" id="contact1Input" value="+92 300 7654321 (Ammi)" class="w-full bg-neutral-800 border border-neutral-700 rounded-xl p-2.5 text-white">
+        </div>
+        <div>
+          <label class="text-neutral-400 block mb-1">Emergency Contact 2 (Brother):</label>
+          <input type="text" id="contact2Input" value="+92 300 9876543 (Ali Bhai)" class="w-full bg-neutral-800 border border-neutral-700 rounded-xl p-2.5 text-white">
+        </div>
+        <button onclick="saveSettings()" class="w-full py-3 bg-pink-600 hover:bg-pink-500 rounded-xl text-white font-bold transition-all">
+          Save Guardian Settings
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentInput = '0';
+    let previousInput = '';
+    let currentOperator = null;
+    let shouldResetDisplay = false;
+    let secretPin = '9999';
+
+    const mainDisplay = document.getElementById('mainDisplay');
+    const historyDisplay = document.getElementById('historyDisplay');
+    const stealthToast = document.getElementById('stealthToast');
+    const toastMessage = document.getElementById('toastMessage');
+
+    // Update Clock
+    function updateClock() {
+      const now = new Date();
+      document.getElementById('clock').textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    function updateDisplay() {
+      mainDisplay.textContent = currentInput;
+    }
+
+    function inputDigit(digit) {
+      if (currentInput === '0' || shouldResetDisplay) {
+        currentInput = digit;
+        shouldResetDisplay = false;
+      } else {
+        currentInput += digit;
+      }
+      updateDisplay();
+    }
+
+    function inputDot() {
+      if (!currentInput.includes('.')) {
+        currentInput += '.';
+        updateDisplay();
+      }
+    }
+
+    function clearDisplay() {
+      currentInput = '0';
+      previousInput = '';
+      currentOperator = null;
+      historyDisplay.textContent = '';
+      updateDisplay();
+    }
+
+    function toggleSign() {
+      currentInput = (parseFloat(currentInput) * -1).toString();
+      updateDisplay();
+    }
+
+    function inputPercent() {
+      currentInput = (parseFloat(currentInput) / 100).toString();
+      updateDisplay();
+    }
+
+    function setOperator(op) {
+      if (currentOperator !== null) calculateResult();
+      previousInput = currentInput;
+      currentOperator = op;
+      historyDisplay.textContent = `${previousInput} ${currentOperator}`;
+      shouldResetDisplay = true;
+    }
+
+    // Main calculation & STEALTH SOS TRIGGER
+    function calculateResult() {
+      // 🚨 CHECK FOR SECRET PANIC CODE
+      if (currentInput === secretPin || currentInput === '1122') {
+        triggerStealthEmergency();
+        currentInput = '0';
+        clearDisplay();
+        return;
+      }
+
+      if (currentOperator === null || shouldResetDisplay) return;
+
+      const prev = parseFloat(previousInput);
+      const current = parseFloat(currentInput);
+      let result = 0;
+
+      switch (currentOperator) {
+        case '+': result = prev + current; break;
+        case '-': result = prev - current; break;
+        case '×': result = prev * current; break;
+        case '÷': result = current !== 0 ? prev / current : 'Error'; break;
+        default: return;
+      }
+
+      historyDisplay.textContent = `${previousInput} ${currentOperator} ${current} =`;
+      currentInput = result.toString();
+      currentOperator = null;
+      shouldResetDisplay = true;
+      updateDisplay();
+    }
+
+    // Stealth Emergency Trigger
+    function triggerStealthEmergency() {
+      // Vibrate silently if supported on device
+      if (navigator.vibrate) {
+        navigator.vibrate([200, 100, 200]);
+      }
+
+      // Show brief stealth toast for testing
+      stealthToast.classList.remove('hidden');
+      toastMessage.textContent = '🚨 Emergency SOS Dispatched! Family WhatsApp alerted with live GPS & audio vault link.';
+
+      setTimeout(() => {
+        stealthToast.classList.add('hidden');
+      }, 4000);
+
+      console.log('🚨 [STEALTH EMERGENCY TRIGGERED VIA CALCULATOR]');
+      console.log('📡 Dispatched to Beti AI Multi-Agent Dispatcher Bus.');
+    }
+
+    // Hidden Settings Modal (Triple Click on DEG)
+    let degClickCount = 0;
+    let degTimer = null;
+    function handleHiddenSettingsClick() {
+      degClickCount++;
+      clearTimeout(degTimer);
+      degTimer = setTimeout(() => { degClickCount = 0; }, 600);
+
+      if (degClickCount >= 3) {
+        document.getElementById('settingsModal').classList.remove('hidden');
+        degClickCount = 0;
+      }
+    }
+
+    function closeSettings() {
+      document.getElementById('settingsModal').classList.add('hidden');
+    }
+
+    function saveSettings() {
+      secretPin = document.getElementById('secretPinInput').value.trim() || '9999';
+      closeSettings();
+      alert('✅ Beti AI Settings Saved Successfully!');
+    }
+
+    // Long-press '=' for 2 seconds to trigger SOS
+    let pressTimer;
+    const equalBtn = document.getElementById('equalBtn');
+    equalBtn.addEventListener('mousedown', () => {
+      pressTimer = setTimeout(triggerStealthEmergency, 2000);
+    });
+    equalBtn.addEventListener('mouseup', () => clearTimeout(pressTimer));
+    equalBtn.addEventListener('touchstart', () => {
+      pressTimer = setTimeout(triggerStealthEmergency, 2000);
+    });
+    equalBtn.addEventListener('touchend', () => clearTimeout(pressTimer));
+  </script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# env files (secrets)
+.env
+.env*.local
+
+# openclaw sessions (WhatsApp login data)
+.openclaw/
+
+# tooling output
+.playwright-mcp/
+.vercel/
+
+# os / logs
+.DS_Store
+Thumbs.db
+npm-debug.log*

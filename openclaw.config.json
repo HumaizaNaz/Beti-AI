@@ -1,0 +1,36 @@
+{
+  "name": "openclaw-beti-guardian",
+  "version": "1.0.0",
+  "description": "OpenClaw AI Gateway Plugin for Project Beti Multi-Agent Women Safety Ecosystem",
+  "gateway": {
+    "port": 3000,
+    "channels": {
+      "whatsapp": {
+        "enabled": true,
+        "provider": "baileys",
+        "qrAuth": true,
+        "sessionPath": "./.openclaw/sessions/whatsapp"
+      },
+      "telegram": {
+        "enabled": false,
+        "botToken": "ENV_TELEGRAM_BOT_TOKEN"
+      }
+    }
+  },
+  "agent": {
+    "name": "Beti AI Sentinel",
+    "model": "local-fast / whisper-tiny",
+    "endpoint": "http://localhost:3000/api/message",
+    "skills": [
+      "trip_parser_skill",
+      "dead_man_switch_skill",
+      "voice_distress_skill",
+      "emergency_broadcast_skill"
+    ]
+  },
+  "deadManSwitch": {
+    "defaultTimeoutMinutes": 20,
+    "warningWindowMinutes": 3,
+    "autoBroadcastOnTimeout": true
+  }
+}
