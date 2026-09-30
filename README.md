@@ -172,3 +172,11 @@ Distributed under the **MIT License**. Free for public welfare, community deploy
 <p align="center">
   <b>Built with ❤️ for the safety and fearless freedom of every daughter & sister.</b>
 </p>
+
+## 🚀 Run the real app (Hissa 1)
+
+1. Free accounts and local setup: [`docs/setup.md`](docs/setup.md)
+2. Deploy for free: [`docs/deploy.md`](docs/deploy.md)
+3. Before launch, run the checklist: [`docs/fire-drill.md`](docs/fire-drill.md)
+
+The real app lives at `/app`; the family live map at `/t/<token>`; the stolen-phone page at `/help`. Tests: `npm test`.
