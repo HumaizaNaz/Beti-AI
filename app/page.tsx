@@ -34,6 +34,7 @@ interface ChatMessage {
 }
 
 const navLinks = [
+  { href: '/app', label: 'Open App', Icon: ShieldCheck, color: 'text-emerald-400' },
   { href: '/calculator', label: 'Calculator PWA', Icon: Calculator, color: 'text-amber-400' },
   { href: '/voice', label: 'Voice Sentinel', Icon: Mic, color: 'text-brand-rose' },
   { href: '/tracker', label: 'Family Beacon', Icon: MapPin, color: 'text-brand-violet' },

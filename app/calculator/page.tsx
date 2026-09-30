@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { currentPosition } from '@/lib/client/geo';
 
 export default function CalculatorPage() {
   const [currentInput, setCurrentInput] = useState('0');
@@ -21,15 +22,24 @@ export default function CalculatorPage() {
     setTimeout(() => setShowToast(false), 4000);
 
     try {
-      await fetch('/api/trigger-sos', {
+      const pos = await currentPosition(3000);
+      const res = await fetch('/api/sos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: '+923001234567',
-          triggerType: 'PANIC_KEYWORD',
-          reason: 'Stealth SOS triggered via Calculator disguise',
-        }),
+        body: JSON.stringify({ reason: 'calculator', lat: pos?.lat ?? null, lng: pos?.lng ?? null }),
       });
+      if (res.status === 401) {
+        // Not signed in: keep the public demo behaviour.
+        await fetch('/api/trigger-sos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: '+923001234567',
+            triggerType: 'PANIC_KEYWORD',
+            reason: 'Stealth SOS triggered via Calculator disguise',
+          }),
+        });
+      }
     } catch (e) {
       console.error(e);
     }

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { loadLeaflet } from '@/lib/client/leaflet';
 import { PhoneCall, ArrowLeft, Radio, AlertTriangle, Car, MapPin, Share2 } from 'lucide-react';
 
 export default function TrackerPage() {
@@ -9,48 +10,37 @@ export default function TrackerPage() {
   const mapInstanceRef = useRef<any>(null);
 
   useEffect(() => {
-    // Dynamically load Leaflet on client side
-    if (typeof window === 'undefined' || !mapContainerRef.current) return;
+    let cancelled = false;
+    loadLeaflet()
+      .then((L) => {
+        if (cancelled || mapInstanceRef.current || !mapContainerRef.current) return;
+        const lat = 24.8607;
+        const lng = 67.0011;
+        const map = L.map(mapContainerRef.current, { zoomControl: false }).setView([lat, lng], 15);
+        mapInstanceRef.current = map;
 
-    // Load Leaflet CSS
-    if (!document.getElementById('leaflet-css')) {
-      const link = document.createElement('link');
-      link.id = 'leaflet-css';
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      document.head.appendChild(link);
-    }
+        // OSM tiles need no API key; darkened via the .map-tiles-dark CSS filter
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          maxZoom: 19,
+          className: 'map-tiles-dark',
+        }).addTo(map);
 
-    const initMap = () => {
-      const L = (window as any).L;
-      if (!L || mapInstanceRef.current || !mapContainerRef.current) return;
-      const lat = 24.8607;
-      const lng = 67.0011;
-      const map = L.map(mapContainerRef.current, { zoomControl: false }).setView([lat, lng], 15);
-      mapInstanceRef.current = map;
-
-      // OSM tiles need no API key; darkened via the .map-tiles-dark CSS filter
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 19,
-        className: 'map-tiles-dark',
-      }).addTo(map);
-
-      const pulseIcon = L.divIcon({
-        className: 'relative',
-        html: `
+        const pulseIcon = L.divIcon({
+          className: 'relative',
+          html: `
           <div style="position: relative;">
             <div style="border: 3px solid #ef4444; border-radius: 50%; height: 36px; width: 36px; position: absolute; left: -6px; top: -6px; animation: pulsate 1.8s ease-out infinite; opacity: 0;"></div>
             <div style="background: #ef4444; border: 2.5px solid #ffffff; border-radius: 50%; height: 24px; width: 24px; box-shadow: 0 0 15px rgba(239, 68, 68, 0.8);"></div>
           </div>
         `,
-        iconSize: [24, 24],
-        iconAnchor: [12, 12],
-      });
+          iconSize: [24, 24],
+          iconAnchor: [12, 12],
+        });
 
-      const marker = L.marker([lat, lng], { icon: pulseIcon }).addTo(map);
-      marker
-        .bindPopup(`
+        L.marker([lat, lng], { icon: pulseIcon })
+          .addTo(map)
+          .bindPopup(`
           <div style="color: #0f172a; font-family: sans-serif; font-size: 11px; padding: 4px;">
             <b style="color: #ef4444;">🚨 Active SOS Incident</b><br/>
             Ayesha (+92 300 1234567)<br/>
@@ -58,26 +48,12 @@ export default function TrackerPage() {
             Speed: 28 km/h
           </div>
         `)
-        .openPopup();
-    };
-
-    // Load Leaflet JS once (effects run twice in dev Strict Mode)
-    if ((window as any).L) {
-      initMap();
-    } else {
-      let script = document.getElementById('leaflet-js') as HTMLScriptElement | null;
-      if (!script) {
-        script = document.createElement('script');
-        script.id = 'leaflet-js';
-        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-        script.async = true;
-        document.head.appendChild(script);
-      }
-      script.addEventListener('load', initMap);
-    }
+          .openPopup();
+      })
+      .catch(() => {});
 
     return () => {
-      document.getElementById('leaflet-js')?.removeEventListener('load', initMap);
+      cancelled = true;
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
